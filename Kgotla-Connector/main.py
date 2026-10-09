@@ -116,4 +116,4 @@ async def health_check():
     return {"status": "ok", "service": "Kgotla AI Code Engine Connector"}
 @app.get("/")
 async def root():
-return {"status": "ok", "service": "Kgotla AI Code Engine Connector"}
+    return {"status": "ok", "service": "Kgotla AI Code Engine Connector"}
