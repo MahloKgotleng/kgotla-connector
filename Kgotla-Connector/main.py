@@ -6,12 +6,24 @@ import requests
 import jwt
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 
 
 app = FastAPI(
     title="Kgotla AI Connector",
-    version="1.3.1"
+    version="1.3.2"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://kgotlaai.co.za",
+        "https://www.kgotlaai.co.za"
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"]
 )
 
 
