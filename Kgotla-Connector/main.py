@@ -186,6 +186,12 @@ def get_zoho_access_token():
 @app.post("/lead")
 def capture_lead(lead: LeadForm):
 
+    if not lead.consent:
+        raise HTTPException(
+            status_code=400,
+            detail="Consent is required before submitting an enquiry"
+        )
+
     # Authenticate with Zoho
     access_token = get_zoho_access_token()
 
