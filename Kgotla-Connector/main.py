@@ -203,7 +203,7 @@ def capture_lead(lead: LeadForm):
         "Company": lead.company_or_school,
         "Email": str(lead.email),
         "Phone": lead.phone,
-        "Description": lead.need + "\\n\\nConsent captured: Yes (website enquiry)"
+        "Description": lead.need + "\n\nConsent captured: Yes (website enquiry)"
     }
 
     if len(name_parts) > 1:
