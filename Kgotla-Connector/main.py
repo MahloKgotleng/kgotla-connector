@@ -63,6 +63,7 @@ class LeadForm(BaseModel):
     email: EmailStr
     company_or_school: str = Field(min_length=2, max_length=150)
     need: str = Field(min_length=5, max_length=2000)
+    consent: bool
 
 
 # -------------------------------------------------------------
@@ -202,7 +203,7 @@ def capture_lead(lead: LeadForm):
         "Company": lead.company_or_school,
         "Email": str(lead.email),
         "Phone": lead.phone,
-        "Description": lead.need
+        "Description": lead.need + "\\n\\nConsent captured: Yes (website enquiry)"
     }
 
     if len(name_parts) > 1:
