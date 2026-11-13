@@ -8,25 +8,44 @@ import jwt
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
+
 app = FastAPI(
     title="Kgotla AI Connector",
-    version="1.3.0"
+    version="1.3.1"
 )
 
-# --- Environment Variables ---
-JWT_PRIVATE_KEY = os.getenv("JWT_PRIVATE_KEY", "").replace("\\n", "\n")
+
+# -------------------------------------------------------------
+# 1. Environment Variables
+# -------------------------------------------------------------
+
+JWT_PRIVATE_KEY = os.getenv(
+    "JWT_PRIVATE_KEY", ""
+).replace("\\n", "\n")
 
 ZOHO_CLIENT_ID = os.getenv("ZOHO_CLIENT_ID", "")
 ZOHO_CLIENT_SECRET = os.getenv("ZOHO_CLIENT_SECRET", "")
 ZOHO_REFRESH_TOKEN = os.getenv("ZOHO_REFRESH_TOKEN", "")
+
 ZOHO_API_DOMAIN = os.getenv(
-    "ZOHO_API_DOMAIN", "https://www.zohoapis.com"
+    "ZOHO_API_DOMAIN",
+    "https://www.zohoapis.com"
 ).rstrip("/")
 
-ZOHO_ACCOUNTS_URL = "https://accounts.zoho.com"
+# Confirm this matches the data centre where your
+# Zoho CRM account and refresh token were created.
+ZOHO_ACCOUNTS_URL = os.getenv(
+    "ZOHO_ACCOUNTS_URL",
+    "https://accounts.zoho.com"
+).rstrip("/")
 
-# --- Request Models ---
+
+# -------------------------------------------------------------
+# 2. Request Model
+# -------------------------------------------------------------
+
 class LeadForm(BaseModel):
+
     name: str = Field(min_length=2, max_length=100)
     phone: str = Field(min_length=5, max_length=30)
     email: EmailStr
@@ -35,8 +54,9 @@ class LeadForm(BaseModel):
 
 
 # -------------------------------------------------------------
-# 1. JWT Signing Endpoint
+# 3. JWT Signing Endpoint
 # -------------------------------------------------------------
+
 @app.get("/jwt")
 def generate_chat_jwt(user_id: str = "anonymous_visitor"):
 
@@ -67,6 +87,7 @@ def generate_chat_jwt(user_id: str = "anonymous_visitor"):
             JWT_PRIVATE_KEY,
             algorithm="RS256"
         )
+
         return {"token": token}
 
     except Exception:
@@ -77,7 +98,7 @@ def generate_chat_jwt(user_id: str = "anonymous_visitor"):
 
 
 # -------------------------------------------------------------
-# 2. Obtain Zoho Access Token
+# 4. Obtain Zoho Access Token
 # -------------------------------------------------------------
 
 def get_zoho_access_token():
@@ -93,6 +114,7 @@ def get_zoho_access_token():
         )
 
     try:
+
         response = requests.post(
             f"{ZOHO_ACCOUNTS_URL}/oauth/v2/token",
             data={
@@ -104,14 +126,23 @@ def get_zoho_access_token():
             timeout=15
         )
 
-        result = response.json()
+        try:
+            result = response.json()
+        except ValueError:
+            result = {}
+
         access_token = result.get("access_token")
 
         if response.status_code != 200 or not access_token:
-            error_code = result.get("error", "unknown_error")
+
+            error_code = result.get(
+                "error",
+                "unknown_error"
+            )
 
             print(
-                f"Zoho OAuth failed: HTTP {response.status_code}, "
+                f"Zoho OAuth failed: "
+                f"HTTP {response.status_code}, "
                 f"error={error_code}"
             )
 
@@ -123,29 +154,39 @@ def get_zoho_access_token():
         return access_token
 
     except requests.RequestException as exc:
-        print(f"Zoho OAuth connection error: {type(exc).__name__}")
+
+        print(
+            f"Zoho OAuth connection error: "
+            f"{type(exc).__name__}"
+        )
 
         raise HTTPException(
             status_code=502,
             detail="Unable to connect to Zoho authentication service"
         )
 
+
 # -------------------------------------------------------------
-# 3. Create Lead in Zoho CRM
+# 5. Create Lead in Zoho CRM
 # -------------------------------------------------------------
 
 @app.post("/lead")
 def capture_lead(lead: LeadForm):
 
+    # Authenticate with Zoho
     access_token = get_zoho_access_token()
 
+    # Split full name into first and last name
     name_parts = lead.name.strip().split(maxsplit=1)
 
+    last_name = (
+        name_parts[1]
+        if len(name_parts) > 1
+        else name_parts[0]
+    )
+
     lead_data = {
-        "Last_Name": (
-            name_parts[0] if len(name_parts) == 1
-            else name_parts[1]
-        ),
+        "Last_Name": last_name,
         "Company": lead.company_or_school,
         "Email": str(lead.email),
         "Phone": lead.phone,
@@ -156,41 +197,101 @@ def capture_lead(lead: LeadForm):
         lead_data["First_Name"] = name_parts[0]
 
     try:
+
         response = requests.post(
             f"{ZOHO_API_DOMAIN}/crm/v8/Leads",
+
             headers={
                 "Authorization": f"Zoho-oauthtoken {access_token}",
                 "Content-Type": "application/json"
             },
-            json={"data": [lead_data]},
+
+            json={
+                "data": [lead_data]
+            },
+
             timeout=20
         )
 
-        result = response.json()
+        try:
+            result = response.json()
+        except ValueError:
+            result = {}
 
+        # Check HTTP response
         if response.status_code not in (200, 201):
+
+            print(
+                f"Zoho CRM API failed: "
+                f"HTTP {response.status_code}, "
+                f"response={result}"
+            )
+
             raise HTTPException(
                 status_code=502,
                 detail="Zoho CRM rejected the lead submission"
             )
 
+        # Check Zoho application-level response
         records = result.get("data", [])
 
         if not records or records[0].get("status") != "success":
-            print("Zoho CRM lead creation failed:", records)
+
+            print(
+                "Zoho CRM lead creation failed:",
+                records
+            )
+
             raise HTTPException(
                 status_code=502,
                 detail="Zoho CRM could not create the lead"
             )
 
+        # Successful lead creation
         return {
             "status": "success",
             "message": "Lead created successfully",
-            "zoho_id": records[0].get("details", {}).get("id")
+            "zoho_id": records[0].get(
+                "details", {}
+            ).get("id")
         }
 
-    except requests.RequestException:
+    except requests.RequestException as exc:
+
+        print(
+            f"Zoho CRM connection error: "
+            f"{type(exc).__name__}"
+        )
+
         raise HTTPException(
             status_code=502,
             detail="Unable to connect to Zoho CRM"
         )
+
+
+# -------------------------------------------------------------
+# 6. Health Check
+# -------------------------------------------------------------
+
+@app.get("/health")
+def health_check():
+
+    return {
+        "status": "ok",
+        "service": "Kgotla AI Connector",
+        "version": "1.3.1"
+    }
+
+
+# -------------------------------------------------------------
+# 7. Root Endpoint
+# -------------------------------------------------------------
+
+@app.get("/")
+def root():
+
+    return {
+        "status": "ok",
+        "service": "Kgotla AI Connector",
+        "version": "1.3.1"
+    }
