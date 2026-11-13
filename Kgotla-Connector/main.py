@@ -129,3 +129,68 @@ def get_zoho_access_token():
             status_code=502,
             detail="Unable to connect to Zoho authentication service"
         )
+
+# -------------------------------------------------------------
+# 3. Create Lead in Zoho CRM
+# -------------------------------------------------------------
+
+@app.post("/lead")
+def capture_lead(lead: LeadForm):
+
+    access_token = get_zoho_access_token()
+
+    name_parts = lead.name.strip().split(maxsplit=1)
+
+    lead_data = {
+        "Last_Name": (
+            name_parts[0] if len(name_parts) == 1
+            else name_parts[1]
+        ),
+        "Company": lead.company_or_school,
+        "Email": str(lead.email),
+        "Phone": lead.phone,
+        "Description": lead.need
+    }
+
+    if len(name_parts) > 1:
+        lead_data["First_Name"] = name_parts[0]
+
+    try:
+        response = requests.post(
+            f"{ZOHO_API_DOMAIN}/crm/v8/Leads",
+            headers={
+                "Authorization": f"Zoho-oauthtoken {access_token}",
+                "Content-Type": "application/json"
+            },
+            json={"data": [lead_data]},
+            timeout=20
+        )
+
+        result = response.json()
+
+        if response.status_code not in (200, 201):
+            raise HTTPException(
+                status_code=502,
+                detail="Zoho CRM rejected the lead submission"
+            )
+
+        records = result.get("data", [])
+
+        if not records or records[0].get("status") != "success":
+            print("Zoho CRM lead creation failed:", records)
+            raise HTTPException(
+                status_code=502,
+                detail="Zoho CRM could not create the lead"
+            )
+
+        return {
+            "status": "success",
+            "message": "Lead created successfully",
+            "zoho_id": records[0].get("details", {}).get("id")
+        }
+
+    except requests.RequestException:
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to connect to Zoho CRM"
+        )
