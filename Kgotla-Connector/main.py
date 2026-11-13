@@ -12,7 +12,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 app = FastAPI(
     title="Kgotla AI Connector",
-    version="1.3.2"
+    version="1.3.3"
 )
 
 app.add_middleware(
@@ -292,7 +292,7 @@ def health_check():
     return {
         "status": "ok",
         "service": "Kgotla AI Connector",
-        "version": "1.3.1"
+        "version": "1.3.3"
     }
 
 
